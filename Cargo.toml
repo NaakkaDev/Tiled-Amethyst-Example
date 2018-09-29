@@ -1,0 +1,8 @@
+[package]
+name = "coffee_commander"
+version = "0.1.0"
+authors = []
+
+[dependencies]
+amethyst = { git = "https://github.com/amethyst/amethyst", rev = "3aa8aec3f29725411450991826903881b9ae3124" }
+tiled = "0.7.2"

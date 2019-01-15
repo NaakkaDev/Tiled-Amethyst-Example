@@ -1,6 +1,6 @@
 (
-  title: "Coffee Commander",
-  dimensions: None,
+  title: "Tiled Amethyst Example",
+  dimensions: Some((640, 640)),
   max_dimensions: None,
   min_dimensions: None,
   fullscreen: false,

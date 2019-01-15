@@ -9,17 +9,16 @@ use std::path::Path;
 
 use tiled::parse;
 
-use amethyst::core::transform::components::{Transform, GlobalTransform};
-use amethyst::core::cgmath::{Vector3, Rad, Matrix4};
+use amethyst::core::transform::components::Transform;
 use amethyst::core::transform::TransformBundle;
 use amethyst::assets::{AssetStorage, Loader};
 use amethyst::utils::application_root_dir;
 use amethyst::prelude::*;
 use amethyst::ecs::prelude::{Entity};
 use amethyst::input::{is_close_requested, is_key_down}; 
-use amethyst::renderer::{DisplayConfig, DrawSprite, Sprite, SpriteSheet, Pipeline,
+use amethyst::renderer::{DisplayConfig, DrawFlat2D, Sprite, SpriteSheet, Pipeline,
                          TextureCoordinates, Texture, RenderBundle, Stage, VirtualKeyCode,
-                         PngFormat, MaterialTextureSet, Camera, Projection, ScreenDimensions, SpriteRender};
+                         PngFormat, TextureMetadata, Camera, Projection, ScreenDimensions, SpriteRender};
 
 
 pub fn initialize_camera(world: &mut World) -> Entity {
@@ -28,40 +27,37 @@ pub fn initialize_camera(world: &mut World) -> Entity {
         (dim.width(), dim.height())
     };
 
+    let mut camera_transform = Transform::default();
+    camera_transform.set_z(10.0);
+
     world
         .create_entity()
         .with(Camera::from(Projection::orthographic(
-            0.0, width, height, 0.0
+            0.0, width, 0.0, height
         )))
-        .with(GlobalTransform(Matrix4::from_translation(
-            Vector3::new(0.0, 0.0, 1.0).into()
-        )))
+        .with(camera_transform)
         .build()
 }
 
 
 struct GameplayState;
 
-impl<'a, 'b> State<GameData<'a, 'b>, ()> for GameplayState {
+impl<'a, 'b> State<GameData<'a, 'b>, StateEvent> for GameplayState {
     fn on_start(&mut self, data: StateData<GameData>) {
-        let StateData { world, .. } = data;
+        let world = data.world;
 
         // LOAD TILESET IMAGE
-        {
+        let texture_handle = {
             let loader = world.read_resource::<Loader>();
             let texture_storage = world.read_resource::<AssetStorage<Texture>>();
-
-            let texture_handle = loader.load(
+            loader.load(
                 "assets/terrainTiles_default.png",
                 PngFormat,
-                Default::default(),
+                TextureMetadata::srgb_scale(),
                 (),
                 &texture_storage
-            );
-
-            let mut material_texture_set = world.write_resource::<MaterialTextureSet>();
-            material_texture_set.insert(9999, texture_handle);
-        }
+            )
+        };
         // END
 
         // We need the camera to actually see anything
@@ -110,7 +106,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, ()> for GameplayState {
                     let sprite = Sprite {
                         width: tile_width as f32,
                         height: tile_height as f32,
-                        offsets: [0.0, 64.0],
+                        offsets: [0.0, 0.0],
                         tex_coords
                     };
 
@@ -120,7 +116,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, ()> for GameplayState {
 
             // A sheet of sprites.. so all the tile sprites
             let sprite_sheet = SpriteSheet {
-                texture_id: 9999,
+                texture: texture_handle,
                 sprites: tile_sprites
             };
 
@@ -155,8 +151,6 @@ impl<'a, 'b> State<GameData<'a, 'b>, ()> for GameplayState {
                     let tile_sprite = SpriteRender {
                         sprite_sheet: sprite_sheet_handle.clone(),
                         sprite_number: tile as usize,
-                        flip_horizontal: false,
-                        flip_vertical: false
                     };
 
                     // Where we should draw the tile?
@@ -165,17 +159,20 @@ impl<'a, 'b> State<GameData<'a, 'b>, ()> for GameplayState {
                     // Bottom Left is 0,0 so we flip it to Top Left with the
                     // ScreenDimensions.height since tiled coordinates start from top
                     let y_coord = (screen_height) - (y as f32 * tile_height as f32);
+                    // Offset the positions by half the tile size so they're nice and snuggly on the screen
+                    // Alternatively could use the Sprite offsets instead: [-32.0, 32.0]. Depends on the use case I guess.
+                    let offset_x = tile_width as f32/2.0;
+                    let offset_y = -tile_height as f32/2.0;
 
-                    tile_transform.translation = Vector3::new(
-                        x_coord as f32,
-                        y_coord as f32,
-                        -1.0
+                    tile_transform.set_xyz(
+                        offset_x + x_coord as f32,
+                        offset_y + y_coord as f32,
+                        1.0
                     );
 
                     // Create the tile entity
                     world
                         .create_entity()
-                            .with(GlobalTransform::default())
                             .with(tile_transform)
                             .with(tile_sprite)
                         .build();
@@ -185,7 +182,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, ()> for GameplayState {
         }
     }
 
-    fn handle_event(&mut self, _: StateData<GameData>, event: StateEvent<()>) -> Trans<GameData<'a, 'b>, ()> {
+    fn handle_event(&mut self, _: StateData<'_, GameData<'_, '_>>, event: StateEvent) -> Trans<GameData<'a, 'b>, StateEvent> {
         if let StateEvent::Window(event) = &event {
             if is_close_requested(&event) || is_key_down(&event, VirtualKeyCode::Escape) {
                 return Trans::Quit
@@ -194,7 +191,7 @@ impl<'a, 'b> State<GameData<'a, 'b>, ()> for GameplayState {
         Trans::None
     }
 
-    fn update(&mut self, data: StateData<GameData>) -> Trans<GameData<'a, 'b>, ()> {
+    fn update(&mut self, data: StateData<'_, GameData<'_, '_>>) -> Trans<GameData<'a, 'b>, StateEvent> {
         data.data.update(&data.world);
         Trans::None
     }
@@ -205,18 +202,20 @@ fn main() -> Result<(), amethyst::Error> {
 
     // The log level is set to error due do some spam
     amethyst::start_logger(amethyst::LoggerConfig{
-        use_colors: true,
-        level_filter: amethyst::LogLevelFilter::Error
+        stdout: amethyst::StdoutLog::Colored,
+        level_filter: amethyst::LogLevelFilter::Error,
+        log_file: None,
+        allow_env_override: false
     });
 
-    let app_root = application_root_dir();
-    let path = format!("{}/resources/display_config.ron", app_root);
+    let app_root = application_root_dir()?;
+    let path = app_root.join("resources/display_config.ron");
     let config = DisplayConfig::load(&path);
 
     let pipe = Pipeline::build().with_stage(
         Stage::with_backbuffer()
             .clear_target([0.00196, 0.23726, 0.21765, 1.0], 1.0)
-            .with_pass(DrawSprite::new()),
+            .with_pass(DrawFlat2D::new()),
     );
 
     let game_data = GameDataBuilder::default()

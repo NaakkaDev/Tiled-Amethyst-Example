@@ -2,7 +2,15 @@
 name = "tiled-amethyst-example"
 version = "0.1.0"
 authors = []
+edition = "2018"
 
 [dependencies]
-amethyst = { git = "https://github.com/amethyst/amethyst", rev = "f8aafa290a2ce82efcae49f11363ebebdbcfa974" }
-tiled = "0.8.0"
+amethyst = "0.15.0"
+tiled = "0.9.1"
+
+[features]
+default = ["vulkan", "tiles"]
+empty = ["amethyst/empty"]
+metal = ["amethyst/metal"]
+vulkan = ["amethyst/vulkan"]
+tiles = ["amethyst/tiles"]

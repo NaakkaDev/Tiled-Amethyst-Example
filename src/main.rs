@@ -25,7 +25,7 @@ use amethyst::{
     utils::application_root_dir,
     window::{DisplayConfig, ScreenDimensions, Window},
 };
-use tiled::parse;
+use tiled::{LayerData, parse};
 
 
 pub fn initialize_camera(world: &mut World) -> Entity {
@@ -156,12 +156,13 @@ fn load_map(world: &mut World) {
         // NOTE: Only rendering the first layer
         let layer: &tiled::Layer = &map.layers[0];
         
+        if let LayerData::Finite(tiles) = &layer.tiles {
         // Loop the row first and then the individual tiles on that row
         // and then switch to the next row
         // y = row number
         // x = column number
         // IMPORTANT: Bottom left is 0,0 so the tiles list needs to be reversed with .rev()
-        for (y, row) in layer.tiles.iter().rev().enumerate().clone() {
+        for (y, row) in tiles.iter().rev().enumerate().clone() {
             for (x, &tile) in row.iter().enumerate() {
                 // Do nothing with empty tiles
                 if tile.gid == 0 {
@@ -200,6 +201,7 @@ fn load_map(world: &mut World) {
                     .build();
             }
             
+        }
         }
     }
 }
